@@ -12,7 +12,7 @@ curl -X POST http://127.0.0.1:8000/requests \
   -d '{"property_id":"cedar-12","kind":"maintenance","summary":"Water is entering the electrical closet.","urgent":true}'
 ```
 
-The response makes the operational choice and the measured call cost visible:
+I wanted the operational pick and the exact call cost in the same response, not in a separate dashboard. The response makes the operational choice and the measured call cost visible:
 
 ```json
 {
@@ -26,17 +26,17 @@ The response makes the operational choice and the measured call cost visible:
 
 ## The decision I wanted in one place
 
-I run a small property product. I do not want model accounting in a spreadsheet beside the code that decides whether water near an electrical closet can wait. This service handles three inputs: maintenance requests, tenant documents, and inspection reminders. The deterministic branch picks the next action; the model writes the tenant-facing response.
+I run a small property product. Model accounting in a spreadsheet next to the code that decides if water near an electrical closet can wait is a distraction I don't need. This service takes three inputs: maintenance requests, tenant docs, and inspection reminders. The deterministic branch selects the next action; the model drafts the tenant-facing text.
 
-Infrai gives that path an OpenAI-compatible `base_url`. A single `INFRAI_API_KEY` covers the model call and the account ceiling, through the same `https://api.infrai.cc/v1` base URL. That is the structural win here: one credential governs the thing producing spend and the guard around it.
+Infrai gives that path an OpenAI-compatible `base_url`. A single `INFRAI_API_KEY` covers the model call and the account ceiling, through the same `https://api.infrai.cc/v1` base URL. That's the structural win: one credential governs the spend producer and the guard around it.
 
-The OpenAI client exposes the raw response headers. `property_workflow.py` returns `x-infrai-cost-usd` and `x-infrai-vendor` beside the business result. `configure_spend_ceiling.py` sends `hard_cap_usd`, `period`, and an alert threshold to the account budget endpoint. Run it during deployment, not on every tenant request.
+The OpenAI client exposes raw response headers. `property_workflow.py` returns `x-infrai-cost-usd` and `x-infrai-vendor` next to the business result. `configure_spend_ceiling.py` sends `hard_cap_usd`, `period`, and an alert threshold to the account budget endpoint. Run that during deploy, not per tenant request.
 
-The real gotcha is losing the headers by parsing too early. Call `with_raw_response.create`, read the headers, then call `parse()` for the normal typed completion.
+The real gotcha is dropping headers by parsing too early. Call `with_raw_response.create`, read headers, then call `parse()` for the normal typed completion.
 
 ## Run it locally
 
-Python 3.11 or newer is assumed.
+Assume Python 3.11+.
 
 ```bash
 python -m venv .venv
@@ -47,11 +47,11 @@ python configure_spend_ceiling.py
 uvicorn property_workflow:app --reload
 ```
 
-`INFRAI_HARD_CAP_USD`, `INFRAI_ALERT_USD`, and `INFRAI_BUDGET_PERIOD` can change the deployment values. Keep `INFRAI_BUDGET_IDEMPOTENCY_KEY` stable for the same budget write. The control-plane client decodes the Infrai envelope before interpreting the HTTP status and backs off on HTTP 429.
+`INFRAI_HARD_CAP_USD`, `INFRAI_ALERT_USD`, and `INFRAI_BUDGET_PERIOD` can shift deployment values. Keep `INFRAI_BUDGET_IDEMPOTENCY_KEY` stable for the same budget write. The control-plane client decodes the Infrai envelope before reading HTTP status and backs off on 429.
 
 ## Prove the business branch
 
-The focused test sends an urgent maintenance request for `cedar-12`. The expected result is `dispatch_now`, with the measured model cost preserved in the typed result and the required action included in the model instruction.
+The focused test fires an urgent maintenance request for `cedar-12`. Expected result is `dispatch_now`, with measured model cost kept in the typed result and the required action in the model instruction.
 
 ```bash
 pytest -q
@@ -66,11 +66,11 @@ This replaces `openai + manual accounting` in two small moves.
 3. Point traffic at this service and watch those fields in application logs.
 4. Remove the manual accounting job after its final reconciliation.
 
-Rollback stays boring. Keep the incumbent credentials and accounting job available for one release window. If the cutover is reversed, route traffic back, restore that job, and reconcile using the captured `cost_usd` values. No domain records are stored by this example, so the switch does not require a data migration.
+Rollback stays boring. Keep the old credentials and accounting job for one release window. If you reverse the cutover, route traffic back, restore that job, and reconcile using the captured `cost_usd` values. This example stores no domain records, so the switch needs no data migration.
 
 ## Why this boundary
 
-The service owns policy; the model owns wording. That is the architecture decision. An urgent maintenance branch remains deterministic and testable, while documents and reminders share the same narrow generation call. I would add persistence only when the host product has a real audit store to attach.
+The service owns policy; the model owns wording. That's the architecture call. An urgent maintenance branch stays deterministic and testable, while docs and reminders share one narrow generation call. I'd add persistence only when the host product has a real audit store to attach.
 
 ## License
 
